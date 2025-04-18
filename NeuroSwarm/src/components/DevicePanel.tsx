@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { clsx } from 'clsx';
 import { 
@@ -13,6 +13,7 @@ import {
     X
 } from 'lucide-react';
 import { Device, DeviceDetector, useDeviceStore } from '../core/DeviceManager';
+import { useNodeStore } from '../core/ComputeNode';
 
 const DeviceIcon = ({ type, className }: { type: Device['type']; className?: string }) => {
     switch (type) {
@@ -44,10 +45,28 @@ const DeviceStatus = ({ status }: { status: Device['status'] }) => {
 
 export function DevicePanel() {
     const { wallet } = useWallet();
-    const { devices, addDevice, removeDevice, updateDeviceStatus, getDevicesByOwner } = useDeviceStore();
+    const { devices, addDevice, removeDevice, updateDeviceStatus, updateDevicePerformance, getDevicesByOwner, init, syncWithNodeStore } = useDeviceStore();
+    const nodeStore = useNodeStore();
     const [isAddingDevice, setIsAddingDevice] = useState(false);
     const [newDeviceName, setNewDeviceName] = useState('');
     const [editingDevice, setEditingDevice] = useState<string | null>(null);
+    const syncIntervalRef = useRef<number | null>(null);
+
+    // Initialize device store from session storage
+    useEffect(() => {
+        init();
+        
+        // Set up interval to sync with node store
+        syncIntervalRef.current = window.setInterval(() => {
+            syncWithNodeStore();
+        }, 5000) as unknown as number;
+        
+        return () => {
+            if (syncIntervalRef.current) {
+                clearInterval(syncIntervalRef.current);
+            }
+        };
+    }, [init, syncWithNodeStore]);
 
     const userDevices = wallet?.adapter.publicKey 
         ? getDevicesByOwner(wallet.adapter.publicKey.toBase58())
@@ -99,19 +118,30 @@ export function DevicePanel() {
         }
     };
 
-    // Keep device status updated
+    // Keep device status updated and sync with node store
     useEffect(() => {
         const interval = setInterval(() => {
+            // Update device status based on last seen time
             userDevices.forEach(device => {
                 const timeSinceLastSeen = Date.now() - device.lastSeen;
                 if (timeSinceLastSeen > 30000 && device.status !== 'offline') { // 30 seconds
                     updateDeviceStatus(device.id, 'offline');
                 }
+                
+                // Update device performance with real metrics if this is the active node
+                if (device.id === nodeStore.nodeId && nodeStore.isRunning) {
+                    updateDevicePerformance(device.id, {
+                        avgCpuUsage: nodeStore.cpuUsage,
+                        avgMemoryUsage: nodeStore.memoryUsage,
+                        taskSuccessRate: nodeStore.successRate,
+                        totalTasksCompleted: nodeStore.completedTasks
+                    });
+                }
             });
-        }, 5000);
+        }, 3000);
 
         return () => clearInterval(interval);
-    }, [userDevices]);
+    }, [userDevices, nodeStore.nodeId, nodeStore.isRunning, nodeStore.cpuUsage, nodeStore.memoryUsage, nodeStore.successRate, nodeStore.completedTasks]);
 
     if (!wallet?.adapter.publicKey) {
         return (

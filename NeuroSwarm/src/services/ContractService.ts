@@ -1,13 +1,16 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { Program, AnchorProvider, web3, BN, Wallet } from '@project-serum/anchor';
+import { Program, AnchorProvider, web3, BN, Wallet as AnchorWallet } from '@project-serum/anchor';
 import { TOKEN_PROGRAM_ID, createInitializeMintInstruction } from '@solana/spl-token';
 import { Idl } from '@project-serum/anchor';
-import * as IDL from '../idl/swarm_network.json';
+import IDL from '../idl/swarm_network';
+import { config } from '../config';
+import { SupabaseService } from './SupabaseService';
 
 export class ContractService {
     public program: Program<Idl>;
     private provider: AnchorProvider;
     private programId: PublicKey;
+    public supabaseService?: SupabaseService;
     
     // PDAs for the program
     private _pdas: {
@@ -19,11 +22,12 @@ export class ContractService {
 
     constructor(
         connection: Connection,
-        wallet: Wallet,
-        programId?: string
+        wallet: AnchorWallet,
+        programId?: string,
+        supabaseService?: SupabaseService
     ) {
-        // Use provided program ID or fallback to environment variable
-        const programIdStr = programId || 'Cxkf3LNezaq4NiHMaXom1KiKDUPky1o8xL2WXgfHWxWN';
+        // Use provided program ID or fallback to config
+        const programIdStr = programId || config.PROGRAM_ID;
         if (!programIdStr) {
             throw new Error('Program ID not found');
         }
@@ -34,7 +38,12 @@ export class ContractService {
             commitment: 'confirmed',
             preflightCommitment: 'confirmed'
         });
+        
+        // Initialize the program with the IDL
         this.program = new Program(IDL as Idl, this.programId, this.provider);
+        
+        // Set the Supabase service if provided
+        this.supabaseService = supabaseService;
     }
 
     public async initialize() {
@@ -413,5 +422,68 @@ export class ContractService {
                 tokenProgram: TOKEN_PROGRAM_ID,
             })
             .rpc();
+    }
+    
+    /**
+     * Get real-time network statistics from the blockchain
+     * @returns Network statistics including total nodes, active nodes, network load, and reward pool
+     */
+    async getNetworkStats() {
+        try {
+            // Get the state account which contains network-wide data
+            const state = await this.getState();
+            
+            // Get all devices to calculate active nodes
+            const devices = await this.getAllDevices();
+            
+            // Calculate active nodes
+            const activeNodes = devices.filter(device => device.account.isActive).length;
+            
+            // Calculate network load based on active devices and their current tasks
+            let networkLoad = 0;
+            if (devices.length > 0) {
+                const devicesWithTasks = devices.filter(device => device.account.currentTask);
+                networkLoad = (devicesWithTasks.length / devices.length) * 100;
+            }
+            
+            // Get 24h change data
+            let change24h = {
+                totalNodes: 0,
+                activeNodes: 0,
+                networkLoad: 0,
+                rewardPool: 0
+            };
+            
+            // If Supabase service is available, get historical data for 24h change
+            if (this.supabaseService) {
+                try {
+                    const yesterdayStats = await this.supabaseService.getHistoricalNetworkStats(1);
+                    if (yesterdayStats && yesterdayStats.length > 0) {
+                        const yesterday = yesterdayStats[0];
+                        
+                        // Calculate percentage changes
+                        change24h = {
+                            totalNodes: ((devices.length - yesterday.total_nodes) / yesterday.total_nodes) * 100,
+                            activeNodes: ((activeNodes - yesterday.active_nodes) / yesterday.active_nodes) * 100,
+                            networkLoad: ((networkLoad - yesterday.network_load) / yesterday.network_load) * 100,
+                            rewardPool: ((state.rewardPool.toNumber() - yesterday.reward_pool) / yesterday.reward_pool) * 100
+                        };
+                    }
+                } catch (error) {
+                    console.error('Error fetching historical stats:', error);
+                }
+            }
+            
+            return {
+                totalNodes: devices.length,
+                activeNodes,
+                networkLoad,
+                rewardPool: state.rewardPool.toNumber(),
+                change24h
+            };
+        } catch (error) {
+            console.error('Error fetching network stats from blockchain:', error);
+            return null;
+        }
     }
 }

@@ -326,8 +326,24 @@ export class SecurityService {
 
     private isNonceUnique(nonce: string, nodeId: string): boolean {
         // Check if nonce was used recently (e.g., last 24 hours)
-        const recentNonces = this.nodeBehavior.get(nodeId)?.requestPatterns.filter(t => Date.now() - t < 24 * 60 * 60 * 1000) || [];
-        return !recentNonces.some(n => n === hash(nonce)); // Use a hash for comparison
+        const recentNonces = this.nodeBehavior.get(nodeId)?.requestPatterns.filter(t => 
+            typeof t === 'number' && Date.now() - t < 24 * 60 * 60 * 1000
+        ) || [];
+        
+        // Create a simple hash of the nonce for comparison
+        const hashNonce = (str: string): string => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            return hash.toString(16);
+        };
+        
+        // Convert the nonce to a hash and check if it exists in our recent nonces
+        const hashedNonce = hashNonce(nonce);
+        return !recentNonces.some(n => typeof n === 'string' && n === hashedNonce);
     }
 
     private async isVerifiedNode(nodeId: string): Promise<boolean> {

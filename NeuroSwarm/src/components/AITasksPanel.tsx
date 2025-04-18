@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { AITask, TaskType } from '../services/SupabaseService';
+import { AITask, TaskType, TaskStatus } from '../services/SupabaseService';
 import { useNetworkStore } from '../core/ComputeNetwork';
 import { Activity, Zap, Clock, ExternalLink } from 'lucide-react';
+
+// Extended TaskType to include 'all' option for filtering
+type ExtendedTaskType = TaskType | 'all';
 
 interface AITasksPanelProps {
     supabaseService: any;
@@ -15,72 +18,165 @@ interface BlockchainDetails {
     fee: number;
 }
 
-// Mock data generator
-const generateMockTask = (id: number): AITask & { blockchain: BlockchainDetails } => {
-    const types: TaskType[] = ['image_generation', 'chat', 'image_classification', 'image_editing'];
-    const statuses: AITask['status'][] = ['pending', 'processing', 'completed', 'failed'];
-    const imageUrls = [
-        'https://picsum.photos/800/600',
-        'https://picsum.photos/801/600',
-        'https://picsum.photos/800/601',
-        'https://picsum.photos/801/601'
-    ];
-    
-    const type = types[Math.floor(Math.random() * types.length)];
-    const status = statuses[Math.floor(Math.random() * statuses.length)];
-    
-    // Generate mock blockchain details
-    const blockchain: BlockchainDetails = {
-        txHash: `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-        blockHeight: Math.floor(Math.random() * 1000000) + 15000000,
-        confirmations: Math.floor(Math.random() * 100) + 1,
-        gasUsed: Math.floor(Math.random() * 200000) + 50000,
-        fee: Number((Math.random() * 0.01).toFixed(6))
+// Helper function to convert task data to the format we need with real blockchain data
+const createTaskWithBlockchain = async (task: AITask, solanaService?: any): Promise<AITask & { blockchain: BlockchainDetails }> => {
+    // Default blockchain details
+    let blockchain: BlockchainDetails = {
+        txHash: task.blockchain_task_id || 'pending',
+        blockHeight: 0,
+        confirmations: 0,
+        gasUsed: 0,
+        fee: 0
     };
     
+    // If we have a transaction ID and Solana service, fetch real blockchain data
+    if (task.blockchain_task_id && solanaService) {
+        try {
+            // Fetch transaction details from Solana
+            const txDetails = await solanaService.getTransactionDetails(task.blockchain_task_id);
+            
+            if (txDetails) {
+                blockchain = {
+                    txHash: task.blockchain_task_id,
+                    blockHeight: txDetails.slot || 0,
+                    confirmations: txDetails.confirmations || 0,
+                    gasUsed: txDetails.computeUnits || 0,
+                    fee: txDetails.fee ? txDetails.fee / 1e9 : 0 // Convert lamports to SOL
+                };
+            }
+        } catch (error) {
+            console.error('Error fetching transaction details:', error);
+            // Keep using default values if fetch fails
+        }
+    }
+    
     return {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        type,
-        prompt: type === 'image_generation' 
-            ? `Generate a beautiful ${['landscape', 'portrait', 'abstract art', 'sci-fi scene'][Math.floor(Math.random() * 4)]}`
-            : type === 'chat'
-            ? `Tell me about ${['artificial intelligence', 'blockchain', 'quantum computing', 'space exploration'][Math.floor(Math.random() * 4)]}`
-            : `Analyze this ${['photo', 'artwork', 'document', 'diagram'][Math.floor(Math.random() * 4)]}`,
-        result: type === 'image_generation' && status === 'completed' 
-            ? imageUrls[Math.floor(Math.random() * imageUrls.length)]
-            : type === 'chat' && status === 'completed'
-            ? 'Here is a detailed response about the topic you asked...'
-            : '',
-        status,
-        created_at: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-        compute_time: Math.random() * 10 + 1,
-        gpu_usage: Math.random() * 60 + 20,
+        ...task,
         blockchain
     };
 };
 
-export function AITasksPanel({ supabaseService: _ }: AITasksPanelProps) {
+export function AITasksPanel({ supabaseService }: AITasksPanelProps) {
     const [tasks, setTasks] = useState<(AITask & { blockchain: BlockchainDetails })[]>([]);
-    const [selectedType, setSelectedType] = useState<TaskType>('all');
+    const [selectedType, setSelectedType] = useState<ExtendedTaskType>('all');
     const [loading, setLoading] = useState(false);
+    const [stats, setStats] = useState({ total_tasks: 0, avg_compute_time: 0, success_rate: 0 });
     const observer = useRef<IntersectionObserver | null>(null);
     const updateNetworkStats = useNetworkStore(state => state.updateStats);
+    const [autoRefresh, setAutoRefresh] = useState(true);
+    const [solanaService, setSolanaService] = useState<any>(null);
 
-    const stats = {
-        total_tasks: 1254,
-        avg_compute_time: 4.2,
-        success_rate: 95.8
-    };
-
-    // Load initial mock data
+    // Get Solana service from the global context
     useEffect(() => {
-        const initialTasks = Array.from({ length: 20 }, (_, i) => generateMockTask(i));
-        setTasks(initialTasks);
-        updateNetworkStats({
-            networkLoad: 65,
-            networkEfficiency: stats.success_rate,
-        });
+        // Try to get the solana service from the global context
+        const globalAny = window as any;
+        if (globalAny.solanaService) {
+            setSolanaService(globalAny.solanaService);
+        }
     }, []);
+
+    // Load real data from Supabase
+    useEffect(() => {
+        const loadTasks = async () => {
+            setLoading(true);
+            try {
+                let fetchedTasks: AITask[] = [];
+                
+                if (selectedType === 'all') {
+                    fetchedTasks = await supabaseService.getRecentTasks(20);
+                } else {
+                    fetchedTasks = await supabaseService.getTasksByType(selectedType, 20);
+                }
+                
+                // Get task statistics
+                const taskStats = await supabaseService.getTaskStats();
+                setStats(taskStats);
+                
+                // Convert tasks to the format we need with real blockchain data
+                const taskPromises = fetchedTasks.map(task => createTaskWithBlockchain(task, solanaService));
+                const formattedTasks = await Promise.all(taskPromises);
+                
+                setTasks(formattedTasks);
+                updateNetworkStats({
+                    networkLoad: Math.min(fetchedTasks.length * 5, 100),
+                    networkEfficiency: taskStats.success_rate
+                });
+                setLoading(false);
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+                setLoading(false);
+            }
+        };
+        
+        loadTasks();
+        
+        // Set up a timer to periodically refresh tasks if autoRefresh is enabled
+        let refreshInterval: NodeJS.Timeout | null = null;
+        
+        if (autoRefresh) {
+            // Refresh tasks every 30 seconds to get the latest data from the blockchain
+            refreshInterval = setInterval(async () => {
+                try {
+                    // Fetch the latest tasks from the blockchain
+                    let fetchedTasks: AITask[] = [];
+                    
+                    if (selectedType === 'all') {
+                        fetchedTasks = await supabaseService.getRecentTasks(20);
+                    } else {
+                        fetchedTasks = await supabaseService.getTasksByType(selectedType, 20);
+                    }
+                    
+                    // Convert tasks to the format we need with real blockchain data
+                    const taskPromises = fetchedTasks.map(task => createTaskWithBlockchain(task, solanaService));
+                    const formattedTasks = await Promise.all(taskPromises);
+                    
+                    // Update the tasks state
+                    setTasks(formattedTasks);
+                    
+                    // Get updated task statistics
+                    const taskStats = await supabaseService.getTaskStats();
+                    setStats(taskStats);
+                    
+                    // Update network stats
+                    updateNetworkStats({
+                        networkLoad: Math.min(fetchedTasks.length * 5, 100),
+                        networkEfficiency: taskStats.success_rate
+                    });
+                } catch (error) {
+                    console.error('Error refreshing tasks:', error);
+                }
+            }, 30000); // 30 seconds interval
+        }
+        
+        // Subscribe to real-time task updates
+        const unsubscribe = supabaseService.subscribeToTasks((updatedTask: AITask) => {
+            // Only update if the task matches our filter or if 'all' is selected
+            if (selectedType === 'all' || updatedTask.type === selectedType) {
+                const formattedTask = createTaskWithBlockchain(updatedTask);
+                
+                setTasks(prevTasks => {
+                    // Check if the task already exists in our list
+                    const taskIndex = prevTasks.findIndex(t => t.id === updatedTask.id);
+                    
+                    if (taskIndex >= 0) {
+                        // Update the existing task
+                        const newTasks = [...prevTasks];
+                        newTasks[taskIndex] = formattedTask;
+                        return newTasks;
+                    } else {
+                        // Add the new task to the beginning
+                        return [formattedTask, ...prevTasks.slice(0, 19)];
+                    }
+                });
+            }
+        });
+        
+        return () => {
+            // Clean up
+            if (refreshInterval) clearInterval(refreshInterval);
+            unsubscribe();
+        };
+    }, [selectedType, supabaseService, updateNetworkStats, autoRefresh]);
 
     // Infinite scroll handler
     const lastTaskElementRef = useCallback((node: HTMLDivElement | null) => {
@@ -88,20 +184,44 @@ export function AITasksPanel({ supabaseService: _ }: AITasksPanelProps) {
         if (observer.current) observer.current.disconnect();
         
         observer.current = new IntersectionObserver(entries => {
-            if (entries[0].isIntersecting) {
-                setLoading(true);
-                setTimeout(() => {
-                    setTasks(prev => [
-                        ...prev,
-                        ...Array.from({ length: 10 }, (_, i) => generateMockTask(prev.length + i))
-                    ]);
-                    setLoading(false);
-                }, 500);
+            if (entries[0].isIntersecting && !loading) {
+                // Load more tasks when scrolling to the bottom
+                const loadMoreTasks = async () => {
+                    if (loading) return;
+                    setLoading(true);
+                    
+                    try {
+                        // Get the current number of tasks to calculate offset
+                        const offset = tasks.length;
+                        
+                        // Fetch more tasks from the blockchain
+                        let fetchedTasks: AITask[] = [];
+                        
+                        if (selectedType === 'all') {
+                            fetchedTasks = await supabaseService.getRecentTasks(5, offset);
+                        } else {
+                            fetchedTasks = await supabaseService.getTasksByType(selectedType, 5, offset);
+                        }
+                        
+                        // Convert tasks to the format we need with real blockchain data
+                        const taskPromises = fetchedTasks.map(task => createTaskWithBlockchain(task, solanaService));
+                        const formattedTasks = await Promise.all(taskPromises);
+                        
+                        // Add the new tasks to the existing ones
+                        setTasks(prevTasks => [...prevTasks, ...formattedTasks]);
+                        setLoading(false);
+                    } catch (error) {
+                        console.error('Error loading more tasks:', error);
+                        setLoading(false);
+                    }
+                };
+                
+                loadMoreTasks();
             }
         });
 
         if (node) observer.current.observe(node);
-    }, [loading]);
+    }, [loading, selectedType, supabaseService, tasks.length]);
 
     // Filter tasks by type
     const filteredTasks = tasks.filter(task => 
@@ -112,17 +232,39 @@ export function AITasksPanel({ supabaseService: _ }: AITasksPanelProps) {
         <div className="w-full p-6 rounded-lg bg-gray-800/50 border border-gray-700">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold text-white">AI Tasks Panel</h2>
-                <select 
-                    value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value as TaskType)}
-                    className="bg-gray-900/50 text-white rounded border border-gray-700 p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="all">All Tasks</option>
-                    <option value="image_generation">Image Generation</option>
-                    <option value="chat">Uncensored Chat</option>
-                    <option value="image_classification">Image Classification</option>
-                    <option value="image_editing">Image Editing</option>
-                </select>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setSelectedType('all')}
+                        className={`px-3 py-1 rounded-md text-sm ${selectedType === 'all' ? 'bg-blue-600' : 'bg-gray-700'}`}
+                    >
+                        All
+                    </button>
+                    <button 
+                        onClick={() => setSelectedType('inference' as ExtendedTaskType)}
+                        className={`px-3 py-1 rounded-md text-sm ${selectedType === 'inference' ? 'bg-blue-600' : 'bg-gray-700'}`}
+                    >
+                        Inference
+                    </button>
+                    <button 
+                        onClick={() => setSelectedType('training' as ExtendedTaskType)}
+                        className={`px-3 py-1 rounded-md text-sm ${selectedType === 'training' ? 'bg-blue-600' : 'bg-gray-700'}`}
+                    >
+                        Training
+                    </button>
+                    <button 
+                        onClick={() => setSelectedType('data_processing' as ExtendedTaskType)}
+                        className={`px-3 py-1 rounded-md text-sm ${selectedType === 'data_processing' ? 'bg-blue-600' : 'bg-gray-700'}`}
+                    >
+                        Data Processing
+                    </button>
+                    <button 
+                        onClick={() => setAutoRefresh(!autoRefresh)}
+                        className={`px-3 py-1 rounded-md text-sm ${autoRefresh ? 'bg-green-600' : 'bg-gray-700'}`}
+                        title={autoRefresh ? "Auto-refresh enabled" : "Auto-refresh disabled"}
+                    >
+                        {autoRefresh ? "Live" : "Paused"}
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4 mb-6">
@@ -167,7 +309,7 @@ export function AITasksPanel({ supabaseService: _ }: AITasksPanelProps) {
                                 {task.status}
                             </span>
                         </div>
-                        {task.type === 'image_generation' && task.status === 'completed' && task.result && (
+                        {task.type === 'image' && task.status === 'completed' && task.result && (
                             <div className="mt-2 rounded-md overflow-hidden border border-gray-700/50">
                                 <img 
                                     src={task.result} 
@@ -177,16 +319,16 @@ export function AITasksPanel({ supabaseService: _ }: AITasksPanelProps) {
                                 />
                             </div>
                         )}
-                        {task.type === 'chat' && task.status === 'completed' && task.result && (
+                        {task.type === 'text' && task.status === 'completed' && task.result && (
                             <p className="mt-2 text-gray-400">{task.result}</p>
                         )}
                         
                         {/* Task Metrics */}
                         <div className="mt-2 text-sm text-gray-400 flex justify-between items-center">
                             <div>
-                                <span>Compute Time: {task.compute_time.toFixed(1)}s</span>
+                                <span>Compute Time: {(task.compute_time != null ? (task.compute_time / 1000).toFixed(1) : '0.0')}s</span>
                                 <span className="mx-2 text-gray-600">•</span>
-                                <span>GPU Usage: {task.gpu_usage.toFixed(1)}%</span>
+                                <span>GPU Usage: {(task.gpu_usage != null ? task.gpu_usage.toFixed(1) : '0.0')}%</span>
                             </div>
                             <span className="text-xs text-gray-500">{new Date(task.created_at).toLocaleString()}</span>
                         </div>
@@ -212,7 +354,7 @@ export function AITasksPanel({ supabaseService: _ }: AITasksPanelProps) {
                                 </div>
                                 <div>
                                     <div className="text-xs text-gray-400 mb-1">Block Height</div>
-                                    <div className="text-sm text-white">#{task.blockchain.blockHeight.toLocaleString()}</div>
+                                    <div className="text-sm text-gray-300">{task.blockchain.blockHeight}</div>
                                 </div>
                             </div>
                             <div className="grid grid-cols-3 gap-4 mt-2">
@@ -232,6 +374,7 @@ export function AITasksPanel({ supabaseService: _ }: AITasksPanelProps) {
                         </div>
                     </div>
                 ))}
+                
                 {loading && (
                     <div className="text-center py-4">
                         <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>

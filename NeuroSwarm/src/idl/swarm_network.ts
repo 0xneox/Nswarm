@@ -52,7 +52,6 @@ export const SwarmNetwork: Idl = {
   "instructions": [
     {
       "name": "initialize",
-      "discriminator": [175,175,109,31,13,152,155,237],
       "accounts": [
         {
           "name": "authority",
@@ -144,7 +143,6 @@ export const SwarmNetwork: Idl = {
     },
     {
       "name": "registerDevice",
-      "discriminator": [242,201,142,137,192,235,157,148],
       "accounts": [
         {
           "name": "owner",
@@ -272,3 +270,5 @@ export const SwarmNetwork: Idl = {
     }
   ]
 } as const;
+
+export default SwarmNetwork;

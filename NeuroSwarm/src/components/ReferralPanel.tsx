@@ -1,28 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-
-interface ReferralReward {
-    amount: number;
-    source: string;
-    timestamp: string;
-    tier: number;
-}
-
-interface ReferralUser {
-    referred_id: string;
-    created_at: string;
-    tier: number;
-}
-
-interface ReferralStats {
-    referral_code: string;
-    referral_link: string;
-    direct_referrals: number;
-    indirect_referrals: number;
-    total_rewards: number;
-    recent_referrals: ReferralUser[];
-    recent_rewards: ReferralReward[];
-}
+import { SupabaseService, ReferralStats } from '../services/SupabaseService';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { config } from '../config';
 
 const defaultStats: ReferralStats = {
     referral_code: "",
@@ -36,36 +16,29 @@ const defaultStats: ReferralStats = {
 
 export function ReferralPanel() {
     const [stats, setStats] = useState<ReferralStats>(defaultStats);
-    const [userId, setUserId] = useState<string>("");
     const [copied, setCopied] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { wallet } = useWallet();
+    
+    // Initialize Supabase service
+    const supabaseService = new SupabaseService(config.SUPABASE_URL, config.SUPABASE_KEY);
 
-    // Fetch user ID from local storage on component mount
+    // Fetch referral stats when wallet changes
     useEffect(() => {
-        const storedUserId = localStorage.getItem('userId');
-        if (storedUserId) {
-            setUserId(storedUserId);
-        }
-    }, []);
-
-    // Fetch referral stats when userId changes
-    useEffect(() => {
-        if (!userId) return;
+        if (!wallet?.adapter.publicKey) return;
         
         const fetchReferralStats = async () => {
             setLoading(true);
             setError(null);
             
             try {
-                const response = await fetch(`/api/referrals/stats?user_id=${encodeURIComponent(userId)}`);
+                // Get user ID from wallet public key
+                const userId = wallet.adapter.publicKey?.toString() || crypto.randomUUID();
                 
-                if (!response.ok) {
-                    throw new Error(`Error fetching referral stats: ${response.statusText}`);
-                }
-                
-                const data = await response.json();
-                setStats(data);
+                // Fetch real referral stats from Supabase
+                const referralStats = await supabaseService.getReferralStats(userId);
+                setStats(referralStats);
             } catch (err) {
                 console.error("Failed to fetch referral stats:", err);
                 setError("Failed to load referral statistics. Please try again later.");
@@ -75,7 +48,12 @@ export function ReferralPanel() {
         };
         
         fetchReferralStats();
-    }, [userId]);
+        
+        // Set up polling to refresh stats every 30 seconds
+        const intervalId = setInterval(fetchReferralStats, 30000);
+        
+        return () => clearInterval(intervalId);
+    }, [wallet?.adapter.publicKey]);
 
     const copyReferralLink = () => {
         navigator.clipboard.writeText(stats.referral_link)

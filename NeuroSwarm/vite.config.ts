@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-
 import { builtinModules } from 'module';
 
 // https://vitejs.dev/config/
@@ -11,6 +10,7 @@ export default defineConfig({
     commonjsOptions: {
       transformMixedEsModules: true,
       include: [/node_modules/],
+      exclude: [/node_modules\/elliptic\/lib\/elliptic\.js/],
     },
     target: 'es2020',
     rollupOptions: {
@@ -19,6 +19,8 @@ export default defineConfig({
         'electron',
         '@trezor/connect-common',
         '@trezor/utils',
+        'elliptic',
+        '@toruslabs/metadata-helpers',
       ],
       output: {
         manualChunks: {
@@ -45,11 +47,12 @@ export default defineConfig({
     })
   ],
   optimizeDeps: {
-    exclude: ['lucide-react'],
+    exclude: ['lucide-react', 'elliptic'],
     include: [
       '@solana/web3.js',
       '@solana/spl-token',
-      'bn.js'
+      'bn.js',
+      '@toruslabs/metadata-helpers'
     ],
     esbuildOptions: {
       target: 'es2020'
@@ -64,12 +67,13 @@ export default defineConfig({
       url: 'rollup-plugin-node-polyfills/polyfills/url',
       os: 'rollup-plugin-node-polyfills/polyfills/os',
       path: 'rollup-plugin-node-polyfills/polyfills/path',
-      zlib: 'rollup-plugin-node-polyfills/polyfills/zlib'
+      zlib: 'rollup-plugin-node-polyfills/polyfills/zlib',
+      // Fix for elliptic library
+      'elliptic': './node_modules/elliptic/lib/elliptic.js'
     }
   },
   define: {
     'process.env': {},
     global: 'globalThis',
-  },
-
+  }
 });
