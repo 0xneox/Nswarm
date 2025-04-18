@@ -8,78 +8,75 @@ export default defineConfig({
   build: {
     commonjsOptions: {
       transformMixedEsModules: true,
-      include: [/node_modules/],
     },
     target: 'es2020',
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks: {
           'solana-web3': ['@solana/web3.js'],
           'solana-spl': ['@solana/spl-token'],
-          'bn': ['bn.js']
         }
       }
     }
   },
+  define: {
+    'process.env': {},
+    'global': {}
+  },
   plugins: [
     react(),
     nodePolyfills({
-      // Whether to polyfill specific globals.
       globals: {
         Buffer: true,
         global: true,
         process: true,
       },
-      // Whether to polyfill specific modules
       protocolImports: true,
-      // Include all required polyfills for Solana
-      include: [
-        'buffer', 
-        'crypto', 
-        'events', 
-        'stream', 
-        'string_decoder',
-        'util', 
-        'assert',
-        'http', 
-        'https', 
-        'os', 
-        'path', 
-        'punycode',
-        'querystring',
-        'url', 
-        'zlib'
-      ]
     })
   ],
-  optimizeDeps: {
-    esbuildOptions: {
-      target: 'es2020',
-      // Node.js global to browser globalThis
-      define: {
-        global: 'globalThis'
-      },
-    },
-    include: [
-      '@solana/web3.js',
-      '@solana/spl-token',
-      'bn.js',
-      'buffer',
-    ],
-    // Exclude problematic dependencies
-    exclude: ['elliptic']
-  },
   resolve: {
     alias: {
       process: 'process/browser',
       stream: 'stream-browserify',
       zlib: 'browserify-zlib',
       util: 'util',
+      crypto: 'crypto-browserify',
+      events: 'events',
+      buffer: 'buffer',
+      assert: 'assert',
+      path: 'path-browserify',
+      fs: 'browserify-fs',
+      os: 'os-browserify/browser',
+      http: 'stream-http',
+      https: 'https-browserify',
+      querystring: 'querystring-es3',
     }
   },
-  define: {
-    'process.env': {},
-    // Fix Buffer is not defined error
-    'global': 'globalThis',
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'es2020',
+      define: {
+        global: 'globalThis'
+      },
+      supported: {
+        bigint: true
+      }
+    },
+    include: [
+      '@solana/web3.js',
+      '@solana/spl-token',
+      'bn.js',
+      'buffer',
+      'crypto-browserify',
+      'events',
+      'stream-browserify',
+      'util',
+      'assert',
+      'path-browserify',
+      'os-browserify/browser',
+      'stream-http',
+      'https-browserify',
+    ]
   }
 });
