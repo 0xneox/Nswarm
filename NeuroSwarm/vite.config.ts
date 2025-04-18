@@ -8,6 +8,11 @@ export default defineConfig({
   build: {
     commonjsOptions: {
       transformMixedEsModules: true,
+      include: [
+        /node_modules/,
+        /supabase/,
+        /@supabase/
+      ]
     },
     target: 'es2020',
     sourcemap: true,
@@ -16,6 +21,7 @@ export default defineConfig({
         manualChunks: {
           'solana-web3': ['@solana/web3.js'],
           'solana-spl': ['@solana/spl-token'],
+          'supabase': ['@supabase/supabase-js']
         }
       }
     }
