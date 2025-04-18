@@ -1,8 +1,11 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  base = "/"
+  node_version = "20.x"
 
 [build.environment]
+  SITE_NAME = "Neuro Swarm"
   NODE_VERSION = "20"
 
 [[redirects]]
