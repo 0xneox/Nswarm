@@ -1,7 +1,7 @@
 [build]
-  command = "cd NeuroSwarm && npm install && npm run build"
-  publish = "NeuroSwarm/dist"
-  base = "/NeuroSwarm"
+  command = "npm install && npm run build"
+  publish = "dist"
+  base = "/"
   node_version = "20.x"
 
 [build.environment]
@@ -9,13 +9,13 @@
   NODE_VERSION = "20"
 
 [context.production]
-  command = "cd NeuroSwarm && npm install && npm run build"
-  publish = "NeuroSwarm/dist"
-  base = "/NeuroSwarm"
+  command = "npm install && npm run build"
+  publish = "dist"
+  base = "/"
 
 [[redirects]]
   from = "/*"
-  to = "/NeuroSwarm/index.html"
+  to = "/index.html"
   status = 200
 
 [functions]
