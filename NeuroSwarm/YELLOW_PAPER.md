@@ -304,11 +304,7 @@ npm run start:node
    await taskScheduler.cancelTask(taskId);
    ```
 
-## Contact & Support
 
-- Security Team: security@team.com
-- DevOps: devops@team.com
-- Network Admin: admin@team.com
 
 ## Version History
 
