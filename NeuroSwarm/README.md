@@ -19,7 +19,7 @@ neuroSwarm is a "connect-to-earn" platform that enables users to contribute thei
 ### Prerequisites
 
 - Node.js (for development)
-- Python 3.x (for the server)
+
 
 ### Installation
 
@@ -148,15 +148,7 @@ The following API endpoints are available:
 npm run build
 ```
 
-### Deployment
 
-To deploy to Replit:
-
-1. Create a new Replit project
-2. Clone this repository
-3. Run `npm install`
-4. Configure environment variables in the Replit Secrets tab
-5. Deploy using the Replit deployment features
 
 ## License
 
@@ -166,4 +158,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Solana Foundation
 - OpenAI
-- Replit
