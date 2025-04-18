@@ -1,6 +1,6 @@
 [build]
-  command = "npm run build"
-  publish = "dist"
+  command = "cd NeuroSwarm && npm run build"
+  publish = "NeuroSwarm/dist"
   base = "/"
   node_version = "20.x"
 
