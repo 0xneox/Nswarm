@@ -159,9 +159,3 @@ Key metrics to monitor:
 - Resource utilization
 - Security incidents
 
-### 7. Emergency Contacts
-
-For critical issues:
-1. Security Team: security@team.com
-2. DevOps: devops@team.com
-3. Network Admin: admin@team.com
