@@ -1,0 +1,22 @@
+[build]
+  command = "cd NeuroSwarm && npm run build"
+  publish = "NeuroSwarm/dist"
+  base = "/NeuroSwarm"
+  node_version = "20.x"
+
+[build.environment]
+  SITE_NAME = "Neuro Swarm"
+  NODE_VERSION = "20"
+
+[context.production]
+  command = "cd NeuroSwarm && npm run build"
+  publish = "NeuroSwarm/dist"
+  base = "/NeuroSwarm"
+
+[[redirects]]
+  from = "/*"
+  to = "/NeuroSwarm/index.html"
+  status = 200
+
+[functions]
+  directory = "src/server/functions"
