@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import { builtinModules } from 'module';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -10,18 +9,9 @@ export default defineConfig({
     commonjsOptions: {
       transformMixedEsModules: true,
       include: [/node_modules/],
-      exclude: [/node_modules\/elliptic\/lib\/elliptic\.js/],
     },
     target: 'es2020',
     rollupOptions: {
-      external: [
-        ...builtinModules,
-        'electron',
-        '@trezor/connect-common',
-        '@trezor/utils',
-        'elliptic',
-        '@toruslabs/metadata-helpers',
-      ],
       output: {
         manualChunks: {
           'solana-web3': ['@solana/web3.js'],
@@ -32,48 +22,62 @@ export default defineConfig({
     }
   },
   plugins: [
+    react(),
     nodePolyfills({
-      include: ['buffer', 'crypto', 'stream', 'util', 'http', 'https', 'zlib', 'os', 'url', 'assert'],
+      // Whether to polyfill specific globals.
       globals: {
         Buffer: true,
         global: true,
         process: true,
       },
-    }),
-    react(),
-    nodePolyfills({
-      // Polyfills for Solana web3.js
-      include: ['buffer', 'crypto', 'stream', 'util', 'http', 'https', 'url', 'os', 'path', 'zlib']
+      // Whether to polyfill specific modules
+      protocolImports: true,
+      // Include all required polyfills for Solana
+      include: [
+        'buffer', 
+        'crypto', 
+        'events', 
+        'stream', 
+        'string_decoder',
+        'util', 
+        'assert',
+        'http', 
+        'https', 
+        'os', 
+        'path', 
+        'punycode',
+        'querystring',
+        'url', 
+        'zlib'
+      ]
     })
   ],
   optimizeDeps: {
-    exclude: ['lucide-react', 'elliptic'],
+    esbuildOptions: {
+      target: 'es2020',
+      // Node.js global to browser globalThis
+      define: {
+        global: 'globalThis'
+      },
+    },
     include: [
       '@solana/web3.js',
       '@solana/spl-token',
       'bn.js',
-      '@toruslabs/metadata-helpers'
+      'buffer',
     ],
-    esbuildOptions: {
-      target: 'es2020'
-    }
   },
   resolve: {
     alias: {
-      // Polyfill node modules
-      buffer: 'rollup-plugin-node-polyfills/polyfills/buffer-es6',
-      http: 'rollup-plugin-node-polyfills/polyfills/http',
-      https: 'rollup-plugin-node-polyfills/polyfills/http',
-      url: 'rollup-plugin-node-polyfills/polyfills/url',
-      os: 'rollup-plugin-node-polyfills/polyfills/os',
-      path: 'rollup-plugin-node-polyfills/polyfills/path',
-      zlib: 'rollup-plugin-node-polyfills/polyfills/zlib',
-      // Fix for elliptic library
-      'elliptic': './node_modules/elliptic/lib/elliptic.js'
+      process: 'process/browser',
+      stream: 'stream-browserify',
+      zlib: 'browserify-zlib',
+      util: 'util',
     }
   },
   define: {
     'process.env': {},
-    global: 'globalThis',
+    // Fix Buffer is not defined error
+    'global': 'globalThis',
   }
 });
