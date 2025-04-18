@@ -66,6 +66,8 @@ export default defineConfig({
       'bn.js',
       'buffer',
     ],
+    // Exclude problematic dependencies
+    exclude: ['elliptic']
   },
   resolve: {
     alias: {
