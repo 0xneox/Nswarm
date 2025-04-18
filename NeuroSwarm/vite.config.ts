@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import commonjs from '@rollup/plugin-commonjs';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -8,15 +9,22 @@ export default defineConfig({
   build: {
     commonjsOptions: {
       transformMixedEsModules: true,
-      include: [
-        /node_modules/,
-        /supabase/,
-        /@supabase/
-      ]
+      include: [/node_modules/],
+      exclude: [/node_modules\/supabase/]
     },
     target: 'es2020',
     sourcemap: true,
     rollupOptions: {
+      plugins: [
+        commonjs({
+          include: [/node_modules\/supabase/],
+          sourceMap: false,
+          ignoreGlobal: true,
+          namedExports: {
+            '@supabase/supabase-js': ['createClient']
+          }
+        })
+      ],
       output: {
         manualChunks: {
           'solana-web3': ['@solana/web3.js'],
