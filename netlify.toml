@@ -1,6 +1,6 @@
 [build]
-  command = "cd NeuroSwarm/NeuroSwarm && npm install && npm run build"
-  publish = "NeuroSwarm/NeuroSwarm/dist"
+  command = "cd NeuroSwarm && npm install && npm run build"
+  publish = "NeuroSwarm/dist"
   base = "/"
   node_version = "20.x"
 
@@ -11,8 +11,8 @@
   VITE_SOLANA_NETWORK = "devnet"
 
 [context.production]
-  command = "cd NeuroSwarm/NeuroSwarm && npm install && npm run build"
-  publish = "NeuroSwarm/NeuroSwarm/dist"
+  command = "cd NeuroSwarm && npm install && npm run build"
+  publish = "NeuroSwarm/dist"
   base = "/"
 
 [[redirects]]
@@ -21,7 +21,7 @@
   status = 200
 
 [functions]
-  directory = "NeuroSwarm/NeuroSwarm/src/server/functions"
+  directory = "NeuroSwarm/src/server/functions"
 
 [[plugins]]
   package = "@netlify/plugin-lighthouse"
